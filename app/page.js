@@ -58,6 +58,7 @@ function rowToPost(row) {
     source: row.source || "",
     sourceWords: row.source_words,
     reactions: row.reactions || 0,
+    featured: !!row.featured,
     ts: new Date(row.created_at).getTime(),
   };
 }
@@ -107,7 +108,7 @@ export default function JvCut() {
   const [loaded, setLoaded] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [draft, setDraft] = useState({ text: "", tag: "annonce", platforms: ["multi"], source: "", sourceWords: "" });
+  const [draft, setDraft] = useState({ text: "", tag: "annonce", platforms: ["multi"], source: "", sourceWords: "", featured: false });
   const [activeFilter, setActiveFilter] = useState("all");
   const [activePlatform, setActivePlatform] = useState("all");
   const [expandedIds, setExpandedIds] = useState(() => new Set());
@@ -225,10 +226,11 @@ export default function JvCut() {
         platforms: post.platforms && post.platforms.length ? post.platforms : ["multi"],
         source: post.source || "",
         sourceWords: post.sourceWords ? String(post.sourceWords) : "",
+        featured: !!post.featured,
       });
     } else {
       setEditingId(null);
-      setDraft({ text: "", tag: "annonce", platforms: ["multi"], source: "", sourceWords: "" });
+      setDraft({ text: "", tag: "annonce", platforms: ["multi"], source: "", sourceWords: "", featured: false });
     }
     setComposerOpen(true);
     setSaveError("");
@@ -253,8 +255,20 @@ export default function JvCut() {
       platforms: draft.platforms,
       source: draft.source.trim(),
       source_words: draft.sourceWords ? parseInt(draft.sourceWords, 10) : null,
+      featured: draft.featured,
     };
     let error;
+    // Une seule news à la une à la fois : si on en coche une nouvelle,
+    // on décoche d'abord toutes les autres.
+    if (draft.featured) {
+      const { error: unfeaturedError } = await supabase
+        .from("posts")
+        .update({ featured: false })
+        .neq("id", editingId || "00000000-0000-0000-0000-000000000000");
+      if (unfeaturedError) {
+        console.error("Erreur unfeature:", unfeaturedError);
+      }
+    }
     if (editingId) {
       ({ error } = await supabase.from("posts").update(payload).eq("id", editingId));
     } else {
@@ -278,7 +292,9 @@ export default function JvCut() {
     .filter((p) => activeFilter === "all" || p.tag === activeFilter)
     .filter((p) => activePlatform === "all" || (p.platforms || []).includes(activePlatform));
   const sorted = [...filtered].sort((a, b) => b.ts - a.ts);
-  const [featured, ...rest] = sorted;
+  const manuallyFeatured = sorted.find((p) => p.featured);
+  const featured = manuallyFeatured || sorted[0];
+  const rest = sorted.filter((p) => p.id !== featured?.id);
   const draftWords = wordCount(draft.text || "");
   const INK = "#1E1B4B";
 
@@ -553,6 +569,32 @@ export default function JvCut() {
                 style={inputStyle}
               />
             </div>
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginTop: 14,
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={draft.featured}
+                onChange={(e) => setDraft((d) => ({ ...d, featured: e.target.checked }))}
+                style={{ width: 18, height: 18, accentColor: "#7B5CFA", cursor: "pointer" }}
+              />
+              <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 13.5, fontWeight: 600, color: "#1E1B4B" }}>
+                Mettre à la une
+              </span>
+            </label>
+            {draft.featured && (
+              <p style={{ fontSize: 11.5, color: "#9A8F84", margin: "4px 0 0", fontFamily: "'Poppins', sans-serif" }}>
+                Cette news remplacera celle actuellement à la une.
+              </p>
+            )}
 
             {saveError && (
               <div style={{ fontSize: 12, color: "#FF477E", fontWeight: 600, marginTop: 10, background: "#FFF0F4", padding: "8px 10px", borderRadius: 10 }}>
