@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, Fragment } from "react";
-import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Lock, LockOpen, Share2, Flame } from "lucide-react";
+import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Lock, LockOpen, Share2, Flame, Search } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
 const TAGS = [
@@ -111,6 +111,7 @@ export default function JvCut() {
   const [draft, setDraft] = useState({ text: "", tag: "annonce", platforms: ["multi"], source: "", sourceWords: "", featured: false });
   const [activeFilter, setActiveFilter] = useState("all");
   const [activePlatform, setActivePlatform] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [reactedIds, setReactedIds] = useState(() => new Set());
   const [copiedId, setCopiedId] = useState(null);
@@ -290,11 +291,13 @@ export default function JvCut() {
 
   const filtered = posts
     .filter((p) => activeFilter === "all" || p.tag === activeFilter)
-    .filter((p) => activePlatform === "all" || (p.platforms || []).includes(activePlatform));
+    .filter((p) => activePlatform === "all" || (p.platforms || []).includes(activePlatform))
+    .filter((p) => !searchQuery.trim() || p.text.toLowerCase().includes(searchQuery.trim().toLowerCase()));
   const sorted = [...filtered].sort((a, b) => b.ts - a.ts);
+  const isSearching = searchQuery.trim().length > 0;
   const manuallyFeatured = sorted.find((p) => p.featured);
-  const featured = manuallyFeatured || sorted[0];
-  const rest = sorted.filter((p) => p.id !== featured?.id);
+  const featured = isSearching ? null : manuallyFeatured || sorted[0];
+  const rest = isSearching ? sorted : sorted.filter((p) => p.id !== featured?.id);
   const draftWords = wordCount(draft.text || "");
   const INK = "#1E1B4B";
 
@@ -377,6 +380,52 @@ export default function JvCut() {
           </div>
         </div>
 
+        {/* Search */}
+        <div style={{ position: "relative", marginTop: 16, padding: "0 2px" }}>
+          <Search
+            size={16}
+            color="#B3A6CC"
+            style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+          />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Rechercher une news..."
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "11px 14px 11px 38px",
+              borderRadius: 14,
+              border: "1px solid #EADFF2",
+              background: "#FFFFFF",
+              fontSize: 14,
+              fontFamily: "'Poppins', sans-serif",
+              color: "#1E1B4B",
+              outline: "none",
+            }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              aria-label="Effacer la recherche"
+              style={{
+                position: "absolute",
+                right: 10,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 4,
+                display: "flex",
+                color: "#B3A6CC",
+              }}
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
         {/* Filters */}
         <div style={{ display: "flex", gap: 8, padding: "16px 2px 8px", overflowX: "auto" }}>
           <FilterPill active={activeFilter === "all"} onClick={() => setActiveFilter("all")} color={INK}>
@@ -445,7 +494,7 @@ export default function JvCut() {
 
         {loaded && sorted.length === 0 && (
           <div style={{ textAlign: "center", color: "#9A8F84", fontWeight: 600, padding: "50px 0" }}>
-            Aucune news dans cette catégorie.
+            {isSearching ? `Aucun résultat pour "${searchQuery.trim()}".` : "Aucune news dans cette catégorie."}
           </div>
         )}
 
