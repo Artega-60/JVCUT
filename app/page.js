@@ -143,8 +143,14 @@ async function sharePost(post) {
   return false;
 }
 
+const PAGE_SIZE = 30;
+
 export default function JvCut() {
   const [posts, setPosts] = useState([]);
+  const [featuredPost, setFeaturedPost] = useState(null);
+  const [ticker, setTicker] = useState([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -152,6 +158,7 @@ export default function JvCut() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [activePlatform, setActivePlatform] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [reactedIds, setReactedIds] = useState(() => new Set());
   const [copiedId, setCopiedId] = useState(null);
@@ -212,19 +219,74 @@ export default function JvCut() {
     });
   }
 
-  async function fetchPosts() {
-    const { data, error } = await supabase
-      .from("posts")
-      .select("*")
-      .order("created_at", { ascending: false });
+  // La recherche interroge la base après une courte pause (pas à chaque
+  // frappe), pour éviter de surcharger Supabase pendant que l'utilisateur tape.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  const noFiltersActive = activeFilter === "all" && activePlatform === "all" && !debouncedSearch;
+
+  // Charge une page de news depuis Supabase, en tenant compte des filtres actifs.
+  // append=false : remplace la liste (nouveau chargement / filtre changé).
+  // append=true  : ajoute la page suivante (bouton "charger plus").
+  async function fetchPosts({ append = false } = {}) {
+    if (append) setLoadingMore(true);
+    let query = supabase.from("posts").select("*").order("created_at", { ascending: false });
+    if (activeFilter !== "all") query = query.eq("tag", activeFilter);
+    if (activePlatform !== "all") query = query.contains("platforms", [activePlatform]);
+    if (debouncedSearch) query = query.ilike("text", `%${debouncedSearch}%`);
+    const from = append ? posts.length : 0;
+    query = query.range(from, from + PAGE_SIZE - 1);
+    const { data, error } = await query;
     if (!error && data) {
-      setPosts(data.map(rowToPost));
+      const mapped = data.map(rowToPost);
+      setPosts((prev) => (append ? [...prev, ...mapped] : mapped));
+      setHasMore(data.length === PAGE_SIZE);
     }
     setLoaded(true);
+    setLoadingMore(false);
   }
 
+  // La news "à la une" est cherchée séparément de la pagination, pour
+  // qu'elle s'affiche correctement même si elle n'est plus dans les
+  // dernières news chargées (utile une fois qu'il y a beaucoup de news).
+  async function fetchFeatured() {
+    const { data } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("featured", true)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    setFeaturedPost(data && data[0] ? rowToPost(data[0]) : null);
+  }
+
+  // Le bandeau défilant montre toujours les toutes dernières news, peu
+  // importe les filtres actifs sur la grille en dessous.
+  async function fetchTicker() {
+    const { data } = await supabase
+      .from("posts")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(8);
+    if (data) setTicker(data.map(rowToPost));
+  }
+
+  function loadMore() {
+    if (!hasMore || loadingMore) return;
+    fetchPosts({ append: true });
+  }
+
+  // Recharge la première page à chaque changement de filtre, plateforme ou recherche
   useEffect(() => {
-    fetchPosts();
+    fetchPosts({ append: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilter, activePlatform, debouncedSearch]);
+
+  useEffect(() => {
+    fetchFeatured();
+    fetchTicker();
     setReactedIds(getReactedSet());
   }, []);
 
@@ -235,13 +297,16 @@ export default function JvCut() {
     const channel = supabase
       .channel("posts-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => {
-        fetchPosts();
+        fetchPosts({ append: false });
+        fetchFeatured();
+        fetchTicker();
       })
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilter, activePlatform, debouncedSearch]);
 
   // Force un rafraîchissement périodique pour que les "il y a X min"
   // restent à jour même sans nouvelle news.
@@ -359,24 +424,23 @@ export default function JvCut() {
       setSaveError(error.message || "Une erreur est survenue.");
       return;
     }
-    await fetchPosts();
+    await fetchPosts({ append: false });
+    await fetchFeatured();
+    await fetchTicker();
     closeComposer();
   }
 
   async function deletePost(id) {
     await supabase.from("posts").delete().eq("id", id);
-    await fetchPosts();
+    await fetchPosts({ append: false });
+    await fetchFeatured();
+    await fetchTicker();
   }
 
-  const filtered = posts
-    .filter((p) => activeFilter === "all" || p.tag === activeFilter)
-    .filter((p) => activePlatform === "all" || (p.platforms || []).includes(activePlatform))
-    .filter((p) => !searchQuery.trim() || p.text.toLowerCase().includes(searchQuery.trim().toLowerCase()));
-  const sorted = [...filtered].sort((a, b) => b.ts - a.ts);
   const isSearching = searchQuery.trim().length > 0;
-  const manuallyFeatured = sorted.find((p) => p.featured);
-  const featured = isSearching ? null : manuallyFeatured || sorted[0];
-  const rest = isSearching ? sorted : sorted.filter((p) => p.id !== featured?.id);
+  const manuallyFeatured = noFiltersActive ? featuredPost : posts.find((p) => p.featured);
+  const featured = isSearching ? null : manuallyFeatured || posts[0];
+  const rest = isSearching ? posts : posts.filter((p) => p.id !== featured?.id);
   const draftWords = wordCount(draft.text || "");
   const INK = "var(--ink)";
 
@@ -464,8 +528,8 @@ export default function JvCut() {
               color: "#FFFFFF",
             }}
           >
-            {sorted.slice(0, 6).map((p) => `${TAGS.find((t) => t.id === p.tag)?.emoji || "•"}  ${p.text}`).join("      ")}
-            {sorted.length === 0 && "En attente de news..."}
+            {ticker.map((p) => `${TAGS.find((t) => t.id === p.tag)?.emoji || "•"}  ${p.text}`).join("      ")}
+            {ticker.length === 0 && "En attente de news..."}
           </div>
         </div>
 
@@ -581,9 +645,32 @@ export default function JvCut() {
           })}
         </div>
 
-        {loaded && sorted.length === 0 && (
+        {loaded && posts.length === 0 && (
           <div style={{ textAlign: "center", color: "var(--muted)", fontWeight: 600, padding: "50px 0" }}>
             {isSearching ? `Aucun résultat pour "${searchQuery.trim()}".` : "Aucune news dans cette catégorie."}
+          </div>
+        )}
+
+        {hasMore && posts.length > 0 && (
+          <div style={{ textAlign: "center", marginTop: 16 }}>
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              style={{
+                background: "var(--subtle)",
+                color: "#7B5CFA",
+                border: "none",
+                borderRadius: 999,
+                padding: "10px 22px",
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: loadingMore ? "default" : "pointer",
+                opacity: loadingMore ? 0.7 : 1,
+                fontFamily: "'Poppins', sans-serif",
+              }}
+            >
+              {loadingMore ? "Chargement..." : "Charger plus de news"}
+            </button>
           </div>
         )}
 
