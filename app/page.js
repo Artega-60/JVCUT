@@ -228,6 +228,29 @@ export default function JvCut() {
     setReactedIds(getReactedSet());
   }, []);
 
+  // Mise à jour en temps réel : dès qu'une news est ajoutée, modifiée ou
+  // supprimée (par n'importe qui, y compris depuis un autre appareil), le
+  // site se rafraîchit automatiquement sans que le visiteur ait à recharger.
+  useEffect(() => {
+    const channel = supabase
+      .channel("posts-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => {
+        fetchPosts();
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Force un rafraîchissement périodique pour que les "il y a X min"
+  // restent à jour même sans nouvelle news.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => forceTick((t) => t + 1), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   async function handleReact(id, reactionType) {
     const key = reactionKey(id, reactionType);
     if (reactedIds.has(key)) return;
