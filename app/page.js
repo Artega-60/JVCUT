@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef, Fragment } from "react";
-import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Share2, Flame, Angry, Laugh, PartyPopper, Search, Sun, Moon } from "lucide-react";
+import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Share2, Flame, ThumbsDown, PartyPopper, Search, Sun, Moon } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
 const REACTIONS = [
   { id: "fire", Icon: Flame, color: "#FF7A19" },
-  { id: "angry", Icon: Angry, color: "#FF477E" },
-  { id: "laugh", Icon: Laugh, color: "#FFB100" },
+  { id: "thumbsdown", Icon: ThumbsDown, color: "#FF477E" },
   { id: "party", Icon: PartyPopper, color: "#7B5CFA" },
 ];
 
@@ -843,10 +842,10 @@ function ReactionBar({ post, reactedIds, onReact, size }) {
               display: "flex",
               alignItems: "center",
               gap: compact ? 3 : 5,
-              background: has ? "var(--reactedBg)" : "var(--subtle)",
-              border: "none",
+              background: has ? color + "26" : "var(--subtle)",
+              border: has ? `1.5px solid ${color}` : "1.5px solid transparent",
               borderRadius: 999,
-              padding: compact ? "3px 7px" : "6px 11px",
+              padding: compact ? "2.5px 7px" : "5.5px 11px",
               fontSize: compact ? 11 : 13,
               fontWeight: 700,
               color: has ? color : "var(--muted)",
@@ -854,7 +853,7 @@ function ReactionBar({ post, reactedIds, onReact, size }) {
               fontFamily: "'Poppins', sans-serif",
             }}
           >
-            <Icon size={compact ? 12 : 14} fill={has ? color : "none"} /> {count}
+            <Icon size={compact ? 12 : 14} strokeWidth={has ? 2.5 : 2} /> {count}
           </button>
         );
       })}
