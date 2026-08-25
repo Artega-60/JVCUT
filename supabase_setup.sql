@@ -8,10 +8,17 @@ create table if not exists posts (
   source text default '',
   source_words integer,
   reactions integer not null default 0,
+  featured boolean not null default false,
   created_at timestamptz not null default now()
 );
 
 alter table posts enable row level security;
+
+-- Permissions de base (nécessaires en plus des règles RLS ci-dessous,
+-- sinon Postgres refuse tout accès avant même de regarder les policies)
+grant usage on schema public to anon, authenticated;
+grant select on table posts to anon, authenticated;
+grant insert, update, delete on table posts to authenticated;
 
 -- Tout le monde peut lire les news (le site est public)
 create policy "Public read access"

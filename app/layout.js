@@ -1,6 +1,48 @@
+const SITE_URL = "https://jvcut.com";
+const SITE_NAME = "JvCut";
+const SITE_TITLE = "JvCut — Toute l'actu, en un éclair";
+const SITE_DESCRIPTION =
+  "L'actu jeux vidéo condensée en une phrase. Sorties, patchs, rumeurs et bons plans, sans blabla.";
+
 export const metadata = {
-  title: "JvCut — Actu JV en 10 mots",
-  description: "Toute l'actu jeux vidéo, en un éclair.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE_TITLE,
+    template: "%s — JvCut",
+  },
+  description: SITE_DESCRIPTION,
+  keywords: ["jeux vidéo", "actu jeux vidéo", "news gaming", "JvCut", "sorties jeux vidéo"],
+  applicationName: SITE_NAME,
+  authors: [{ name: "JvCut" }],
+  robots: {
+    index: true,
+    follow: true,
+  },
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "fr_FR",
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "JvCut — Toute l'actu, en un éclair",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: ["/og-image.png"],
+  },
 };
 
 export default function RootLayout({ children }) {
