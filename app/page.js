@@ -1,8 +1,38 @@
 "use client";
 
 import { useState, useEffect, useRef, Fragment } from "react";
-import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Lock, LockOpen, Share2, Flame, Search } from "lucide-react";
+import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Share2, Flame, Search, Sun, Moon } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+
+const LIGHT_THEME = {
+  bg: "#FFEEE2",
+  card: "#FFFFFF",
+  ink: "#1E1B4B",
+  muted: "#9A8F84",
+  border: "#EADFF2",
+  subtle: "#F7F3FF",
+  subtleBorder: "#EDE5FA",
+  placeholder: "#B3A6CC",
+  reactedBg: "#FFE9D6",
+  errorBg: "#FFF0F4",
+  dateLine: "#E9DCEF",
+};
+
+const DARK_THEME = {
+  bg: "#15121F",
+  card: "#211D30",
+  ink: "#F1EDFB",
+  muted: "#9C93B5",
+  border: "#332C49",
+  subtle: "#2A2440",
+  subtleBorder: "#3B3355",
+  placeholder: "#7A7295",
+  reactedBg: "#3A2A22",
+  errorBg: "#3A1E28",
+  dateLine: "#332C49",
+};
+
+const THEME_KEY = "jvcut:theme";
 
 const TAGS = [
   { id: "sortie", label: "Sortie", emoji: "🚀", color: "#FFB100" },
@@ -17,7 +47,7 @@ const PLATFORMS = [
   { id: "xbox", label: "Xbox", color: "#107C10" },
   { id: "nintendo", label: "Nintendo", color: "#E60012" },
   { id: "pc", label: "PC", color: "#4A4A4A" },
-  { id: "multi", label: "Multi", color: "#9A8F84" },
+  { id: "multi", label: "Multi", color: "var(--muted)" },
   { id: "autre", label: "Autre", color: "#B98CFF" },
 ];
 
@@ -118,11 +148,35 @@ export default function JvCut() {
 
   const [session, setSession] = useState(null);
   const [authLoaded, setAuthLoaded] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [emailInput, setEmailInput] = useState("");
-  const [passwordInput, setPasswordInput] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [loginLoading, setLoginLoading] = useState(false);
+
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(THEME_KEY);
+      if (saved === "dark") setIsDark(true);
+      else if (saved === "light") setIsDark(false);
+      else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        setIsDark(true);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  function toggleTheme() {
+    setIsDark((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(THEME_KEY, next ? "dark" : "light");
+      } catch (e) {
+        // ignore
+      }
+      return next;
+    });
+  }
+
+  const theme = isDark ? DARK_THEME : LIGHT_THEME;
 
   const isAdmin = !!session;
   const textareaRef = useRef(null);
@@ -138,27 +192,6 @@ export default function JvCut() {
     });
     return () => listener.subscription.unsubscribe();
   }, []);
-
-  async function tryLogin() {
-    setLoginLoading(true);
-    setLoginError("");
-    const { error } = await supabase.auth.signInWithPassword({
-      email: emailInput.trim(),
-      password: passwordInput,
-    });
-    setLoginLoading(false);
-    if (error) {
-      setLoginError("Identifiants incorrects.");
-      return;
-    }
-    setLoginOpen(false);
-    setEmailInput("");
-    setPasswordInput("");
-  }
-
-  async function logout() {
-    await supabase.auth.signOut();
-  }
 
   function toggleExpand(id) {
     setExpandedIds((prev) => {
@@ -299,16 +332,28 @@ export default function JvCut() {
   const featured = isSearching ? null : manuallyFeatured || sorted[0];
   const rest = isSearching ? sorted : sorted.filter((p) => p.id !== featured?.id);
   const draftWords = wordCount(draft.text || "");
-  const INK = "#1E1B4B";
+  const INK = "var(--ink)";
 
   return (
     <div
       style={{
         minHeight: "100vh",
-        background: "#FFEEE2",
+        background: "var(--bg)",
         fontFamily: "'Poppins', 'Nunito', sans-serif",
-        color: INK,
+        color: "var(--ink)",
         padding: "18px 16px 100px",
+        transition: "background 0.2s ease, color 0.2s ease",
+        "--bg": theme.bg,
+        "--card": theme.card,
+        "--ink": theme.ink,
+        "--muted": theme.muted,
+        "--border": theme.border,
+        "--subtle": theme.subtle,
+        "--subtleBorder": theme.subtleBorder,
+        "--placeholder": theme.placeholder,
+        "--reactedBg": theme.reactedBg,
+        "--errorBg": theme.errorBg,
+        "--dateLine": theme.dateLine,
       }}
     >
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
@@ -326,31 +371,29 @@ export default function JvCut() {
             alt="JvCut — Toute l'actu, en un éclair"
             style={{ display: "block", width: "100%", height: "auto" }}
           />
-          {authLoaded && (
-            <button
-              onClick={() => (isAdmin ? logout() : setLoginOpen(true))}
-              style={{
-                position: "absolute",
-                top: 14,
-                right: 14,
-                background: "rgba(255,255,255,0.75)",
-                backdropFilter: "blur(4px)",
-                border: "none",
-                borderRadius: 999,
-                width: 32,
-                height: 32,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                color: "#1E1B4B",
-              }}
-              aria-label={isAdmin ? "Se déconnecter" : "Connexion admin"}
-              title={isAdmin ? "Déconnexion admin" : "Connexion admin"}
-            >
-              {isAdmin ? <LockOpen size={15} /> : <Lock size={15} />}
-            </button>
-          )}
+          <button
+            onClick={toggleTheme}
+            style={{
+              position: "absolute",
+              top: 14,
+              right: 14,
+              background: "rgba(255,255,255,0.75)",
+              backdropFilter: "blur(4px)",
+              border: "none",
+              borderRadius: 999,
+              width: 32,
+              height: 32,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              color: "#1E1B4B",
+            }}
+            aria-label={isDark ? "Passer en mode clair" : "Passer en mode sombre"}
+            title={isDark ? "Mode clair" : "Mode sombre"}
+          >
+            {isDark ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
         </div>
 
         {/* Breaking news ticker */}
@@ -384,7 +427,7 @@ export default function JvCut() {
         <div style={{ position: "relative", marginTop: 16, padding: "0 2px" }}>
           <Search
             size={16}
-            color="#B3A6CC"
+            color="var(--placeholder)"
             style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
           />
           <input
@@ -396,11 +439,11 @@ export default function JvCut() {
               boxSizing: "border-box",
               padding: "11px 14px 11px 38px",
               borderRadius: 14,
-              border: "1px solid #EADFF2",
-              background: "#FFFFFF",
+              border: "1px solid var(--border)",
+              background: "var(--card)",
               fontSize: 14,
               fontFamily: "'Poppins', sans-serif",
-              color: "#1E1B4B",
+              color: "var(--ink)",
               outline: "none",
             }}
           />
@@ -418,7 +461,7 @@ export default function JvCut() {
                 cursor: "pointer",
                 padding: 4,
                 display: "flex",
-                color: "#B3A6CC",
+                color: "var(--placeholder)",
               }}
             >
               <X size={16} />
@@ -437,9 +480,9 @@ export default function JvCut() {
             </FilterPill>
           ))}
         </div>
-        <div style={{ height: 1, background: "#EADFF2", margin: "0 2px" }} />
+        <div style={{ height: 1, background: "var(--border)", margin: "0 2px" }} />
         <div style={{ display: "flex", gap: 8, padding: "12px 2px 16px", flexWrap: "wrap" }}>
-          <FilterPill active={activePlatform === "all"} onClick={() => setActivePlatform("all")} color="#9A8F84">
+          <FilterPill active={activePlatform === "all"} onClick={() => setActivePlatform("all")} color="var(--muted)">
             Toutes plateformes
           </FilterPill>
           {PLATFORMS.map((p) => (
@@ -493,7 +536,7 @@ export default function JvCut() {
         </div>
 
         {loaded && sorted.length === 0 && (
-          <div style={{ textAlign: "center", color: "#9A8F84", fontWeight: 600, padding: "50px 0" }}>
+          <div style={{ textAlign: "center", color: "var(--muted)", fontWeight: 600, padding: "50px 0" }}>
             {isSearching ? `Aucun résultat pour "${searchQuery.trim()}".` : "Aucune news dans cette catégorie."}
           </div>
         )}
@@ -556,15 +599,15 @@ export default function JvCut() {
             style={{
               width: "100%",
               maxWidth: 460,
-              background: "#FFFFFF",
+              background: "var(--card)",
               borderRadius: 26,
               padding: "22px 22px 26px",
-              boxShadow: "0 24px 60px rgba(30,27,75,0.25)",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.35)",
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <span style={{ fontWeight: 800, fontSize: 18 }}>{editingId ? "Modifier la news" : "Nouvelle news"}</span>
-              <button onClick={closeComposer} style={{ background: "#F5F1FF", border: "none", borderRadius: 999, width: 30, height: 30, color: INK, cursor: "pointer" }}>
+              <button onClick={closeComposer} style={{ background: "var(--subtle)", border: "none", borderRadius: 999, width: 30, height: 30, color: INK, cursor: "pointer" }}>
                 <X size={16} />
               </button>
             </div>
@@ -577,8 +620,8 @@ export default function JvCut() {
               rows={3}
               style={{
                 width: "100%",
-                background: "#F7F3FF",
-                border: "2px solid #EDE5FA",
+                background: "var(--subtle)",
+                border: "2px solid var(--subtleBorder)",
                 borderRadius: 16,
                 color: INK,
                 fontFamily: "'Poppins', sans-serif",
@@ -590,7 +633,7 @@ export default function JvCut() {
                 outline: "none",
               }}
             />
-            <div style={{ fontSize: 11, fontWeight: 700, color: draftWords > 30 ? "#FF477E" : "#9A8F84", marginTop: 5, textAlign: "right" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: draftWords > 30 ? "#FF477E" : "var(--muted)", marginTop: 5, textAlign: "right" }}>
               {draftWords} mot{draftWords > 1 ? "s" : ""} {draftWords > 30 ? "· déjà trop long !" : ""}
             </div>
 
@@ -635,18 +678,18 @@ export default function JvCut() {
                 onChange={(e) => setDraft((d) => ({ ...d, featured: e.target.checked }))}
                 style={{ width: 18, height: 18, accentColor: "#7B5CFA", cursor: "pointer" }}
               />
-              <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 13.5, fontWeight: 600, color: "#1E1B4B" }}>
+              <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 13.5, fontWeight: 600, color: "var(--ink)" }}>
                 Mettre à la une
               </span>
             </label>
             {draft.featured && (
-              <p style={{ fontSize: 11.5, color: "#9A8F84", margin: "4px 0 0", fontFamily: "'Poppins', sans-serif" }}>
+              <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 0", fontFamily: "'Poppins', sans-serif" }}>
                 Cette news remplacera celle actuellement à la une.
               </p>
             )}
 
             {saveError && (
-              <div style={{ fontSize: 12, color: "#FF477E", fontWeight: 600, marginTop: 10, background: "#FFF0F4", padding: "8px 10px", borderRadius: 10 }}>
+              <div style={{ fontSize: 12, color: "#FF477E", fontWeight: 600, marginTop: 10, background: "var(--errorBg)", padding: "8px 10px", borderRadius: 10 }}>
                 {saveError}
               </div>
             )}
@@ -657,8 +700,8 @@ export default function JvCut() {
               style={{
                 width: "100%",
                 marginTop: 18,
-                background: draft.text.trim() ? "linear-gradient(135deg, #FF477E, #7B5CFA)" : "#EDE5FA",
-                color: draft.text.trim() ? "#FFFFFF" : "#B3A6CC",
+                background: draft.text.trim() ? "linear-gradient(135deg, #FF477E, #7B5CFA)" : "var(--subtleBorder)",
+                color: draft.text.trim() ? "#FFFFFF" : "var(--placeholder)",
                 border: "none",
                 borderRadius: 16,
                 padding: "13px 0",
@@ -677,117 +720,13 @@ export default function JvCut() {
         </div>
       )}
 
-      {/* Admin login modal */}
-      {loginOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(30,27,75,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 30,
-            padding: 16,
-          }}
-          onClick={() => setLoginOpen(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "100%",
-              maxWidth: 340,
-              background: "#FFFFFF",
-              borderRadius: 22,
-              padding: "22px 22px 24px",
-              boxShadow: "0 24px 60px rgba(30,27,75,0.25)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <span style={{ fontWeight: 800, fontSize: 16 }}>Connexion admin</span>
-              <button onClick={() => setLoginOpen(false)} style={{ background: "#F5F1FF", border: "none", borderRadius: 999, width: 28, height: 28, color: INK, cursor: "pointer" }}>
-                <X size={14} />
-              </button>
-            </div>
-            <input
-              type="email"
-              value={emailInput}
-              onChange={(e) => {
-                setEmailInput(e.target.value);
-                setLoginError("");
-              }}
-              onKeyDown={(e) => e.key === "Enter" && tryLogin()}
-              placeholder="Email"
-              autoFocus
-              style={{
-                width: "100%",
-                background: "#F7F3FF",
-                border: `2px solid ${loginError ? "#FF477E" : "#EDE5FA"}`,
-                borderRadius: 12,
-                color: INK,
-                fontSize: 14,
-                fontWeight: 500,
-                padding: "10px 13px",
-                boxSizing: "border-box",
-                outline: "none",
-                marginBottom: 8,
-              }}
-            />
-            <input
-              type="password"
-              value={passwordInput}
-              onChange={(e) => {
-                setPasswordInput(e.target.value);
-                setLoginError("");
-              }}
-              onKeyDown={(e) => e.key === "Enter" && tryLogin()}
-              placeholder="Mot de passe"
-              style={{
-                width: "100%",
-                background: "#F7F3FF",
-                border: `2px solid ${loginError ? "#FF477E" : "#EDE5FA"}`,
-                borderRadius: 12,
-                color: INK,
-                fontSize: 14,
-                fontWeight: 500,
-                padding: "10px 13px",
-                boxSizing: "border-box",
-                outline: "none",
-              }}
-            />
-            {loginError && (
-              <div style={{ fontSize: 11.5, color: "#FF477E", fontWeight: 600, marginTop: 6 }}>{loginError}</div>
-            )}
-            <button
-              onClick={tryLogin}
-              disabled={loginLoading}
-              style={{
-                width: "100%",
-                marginTop: 14,
-                background: "linear-gradient(135deg, #FF477E, #7B5CFA)",
-                color: "#FFFFFF",
-                border: "none",
-                borderRadius: 12,
-                padding: "11px 0",
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: loginLoading ? "default" : "pointer",
-                opacity: loginLoading ? 0.7 : 1,
-              }}
-            >
-              {loginLoading ? "Connexion..." : "Se connecter"}
-            </button>
-          </div>
-        </div>
-      )}
-
       <style>{`
         @keyframes scroll-left {
           0% { transform: translateX(100%); }
           100% { transform: translateX(-100%); }
         }
         textarea:focus, input:focus { border-color: #7B5CFA !important; }
-        ::placeholder { color: #B3A6CC; }
+        ::placeholder { color: var(--placeholder); }
       `}</style>
     </div>
   );
@@ -799,7 +738,7 @@ function FeaturedCard({ post, hasReacted, onReact, onShare, copied }) {
   return (
     <div
       style={{
-        background: "#FFFFFF",
+        background: "var(--card)",
         borderRadius: 22,
         padding: "18px 20px",
         marginTop: 4,
@@ -830,9 +769,9 @@ function FeaturedCard({ post, hasReacted, onReact, onShare, copied }) {
             {platMeta.label}
           </span>
         ))}
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#9A8F84", fontWeight: 600 }}>{timeAgo(post.ts)}</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>{timeAgo(post.ts)}</span>
       </div>
-      <p style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.3, margin: 0, color: "#1E1B4B" }}>{post.text}</p>
+      <p style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.3, margin: 0, color: "var(--ink)" }}>{post.text}</p>
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 12 }}>
         <button
           onClick={onReact}
@@ -841,7 +780,7 @@ function FeaturedCard({ post, hasReacted, onReact, onShare, copied }) {
             display: "flex",
             alignItems: "center",
             gap: 5,
-            background: hasReacted ? "#FFE9D6" : "#F7F3FF",
+            background: hasReacted ? "var(--reactedBg)" : "var(--subtle)",
             border: "none",
             borderRadius: 999,
             padding: "6px 12px",
@@ -860,7 +799,7 @@ function FeaturedCard({ post, hasReacted, onReact, onShare, copied }) {
             display: "flex",
             alignItems: "center",
             gap: 5,
-            background: "#F7F3FF",
+            background: "var(--subtle)",
             border: "none",
             borderRadius: 999,
             padding: "6px 12px",
@@ -896,22 +835,22 @@ function DateBar({ label }) {
         margin: "6px 2px 0",
       }}
     >
-      <div style={{ flex: 1, height: 1, background: "#E9DCEF" }} />
+      <div style={{ flex: 1, height: 1, background: "var(--dateLine)" }} />
       <span
         style={{
           fontFamily: "'Rajdhani', sans-serif",
           fontWeight: 700,
           fontSize: 12,
           letterSpacing: "0.06em",
-          color: "#9A8F84",
-          background: "#FFEEE2",
+          color: "var(--muted)",
+          background: "var(--bg)",
           padding: "3px 12px",
           borderRadius: 999,
         }}
       >
         {label.toUpperCase()}
       </span>
-      <div style={{ flex: 1, height: 1, background: "#E9DCEF" }} />
+      <div style={{ flex: 1, height: 1, background: "var(--dateLine)" }} />
     </div>
   );
 }
@@ -925,7 +864,7 @@ function TileCard({ post, expanded, onToggleExpand, onEdit, onDelete, isAdmin, h
   return (
     <div
       style={{
-        background: "#FFFFFF",
+        background: "var(--card)",
         borderRadius: 18,
         padding: "14px 14px 12px",
         boxShadow: "0 6px 16px rgba(30,27,75,0.06)",
@@ -980,7 +919,7 @@ function TileCard({ post, expanded, onToggleExpand, onEdit, onDelete, isAdmin, h
           fontWeight: 600,
           lineHeight: 1.35,
           margin: 0,
-          color: "#1E1B4B",
+          color: "var(--ink)",
           flex: 1,
           display: showFull ? "block" : "-webkit-box",
           WebkitLineClamp: showFull ? "unset" : 3,
@@ -1018,7 +957,7 @@ function TileCard({ post, expanded, onToggleExpand, onEdit, onDelete, isAdmin, h
             display: "flex",
             alignItems: "center",
             gap: 3,
-            background: hasReacted ? "#FFE9D6" : "#F7F3FF",
+            background: hasReacted ? "var(--reactedBg)" : "var(--subtle)",
             border: "none",
             borderRadius: 999,
             padding: "3px 8px",
@@ -1037,7 +976,7 @@ function TileCard({ post, expanded, onToggleExpand, onEdit, onDelete, isAdmin, h
             display: "flex",
             alignItems: "center",
             gap: 3,
-            background: "#F7F3FF",
+            background: "var(--subtle)",
             border: "none",
             borderRadius: 999,
             padding: "3px 8px",
@@ -1074,7 +1013,7 @@ function FilterPill({ active, onClick, color, children }) {
       onClick={onClick}
       style={{
         flexShrink: 0,
-        background: active ? color : "#FFFFFF",
+        background: active ? color : "var(--card)",
         color: active ? "#FFFFFF" : color,
         border: `2px solid ${color}`,
         borderRadius: 999,
@@ -1094,7 +1033,7 @@ function FilterPill({ active, onClick, color, children }) {
 const iconBtnStyle = {
   background: "none",
   border: "none",
-  color: "#9A8F84",
+  color: "var(--muted)",
   fontSize: 11,
   fontWeight: 700,
   display: "flex",
@@ -1107,10 +1046,10 @@ const iconBtnStyle = {
 
 const inputStyle = {
   flex: 1,
-  background: "#F7F3FF",
-  border: "2px solid #EDE5FA",
+  background: "var(--subtle)",
+  border: "2px solid var(--subtleBorder)",
   borderRadius: 12,
-  color: "#1E1B4B",
+  color: "var(--ink)",
   fontSize: 13,
   fontWeight: 500,
   padding: "11px 13px",

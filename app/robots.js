@@ -3,6 +3,7 @@ export default function robots() {
     rules: {
       userAgent: "*",
       allow: "/",
+      disallow: "/admin",
     },
     sitemap: "https://jvcut.com/sitemap.xml",
   };
