@@ -427,7 +427,7 @@ export default function JvCut() {
         </div>
 
         {/* Filters */}
-        <div style={{ display: "flex", gap: 8, padding: "16px 2px 8px", overflowX: "auto" }}>
+        <div style={{ display: "flex", gap: 8, padding: "16px 2px 8px", flexWrap: "wrap" }}>
           <FilterPill active={activeFilter === "all"} onClick={() => setActiveFilter("all")} color={INK}>
             Tout
           </FilterPill>
@@ -438,7 +438,7 @@ export default function JvCut() {
           ))}
         </div>
         <div style={{ height: 1, background: "#EADFF2", margin: "0 2px" }} />
-        <div style={{ display: "flex", gap: 8, padding: "12px 2px 16px", overflowX: "auto" }}>
+        <div style={{ display: "flex", gap: 8, padding: "12px 2px 16px", flexWrap: "wrap" }}>
           <FilterPill active={activePlatform === "all"} onClick={() => setActivePlatform("all")} color="#9A8F84">
             Toutes plateformes
           </FilterPill>
