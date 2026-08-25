@@ -1,8 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef, Fragment } from "react";
-import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Share2, Flame, Search, Sun, Moon } from "lucide-react";
+import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Share2, Flame, Angry, Laugh, PartyPopper, Search, Sun, Moon } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+
+const REACTIONS = [
+  { id: "fire", Icon: Flame, color: "#FF7A19" },
+  { id: "angry", Icon: Angry, color: "#FF477E" },
+  { id: "laugh", Icon: Laugh, color: "#FFB100" },
+  { id: "party", Icon: PartyPopper, color: "#7B5CFA" },
+];
 
 const LIGHT_THEME = {
   bg: "#FFEEE2",
@@ -87,7 +94,7 @@ function rowToPost(row) {
     platforms: row.platforms || [],
     source: row.source || "",
     sourceWords: row.source_words,
-    reactions: row.reactions || 0,
+    reactionCounts: row.reaction_counts || {},
     featured: !!row.featured,
     ts: new Date(row.created_at).getTime(),
   };
@@ -111,6 +118,10 @@ function saveReactedSet(set) {
   } catch (e) {
     // ignore
   }
+}
+
+function reactionKey(postId, reactionType) {
+  return `${postId}:${reactionType}`;
 }
 
 async function sharePost(post) {
@@ -218,20 +229,33 @@ export default function JvCut() {
     setReactedIds(getReactedSet());
   }, []);
 
-  async function handleReact(id) {
-    if (reactedIds.has(id)) return;
+  async function handleReact(id, reactionType) {
+    const key = reactionKey(id, reactionType);
+    if (reactedIds.has(key)) return;
     const next = new Set(reactedIds);
-    next.add(id);
+    next.add(key);
     setReactedIds(next);
     saveReactedSet(next);
-    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, reactions: p.reactions + 1 } : p)));
-    const { error } = await supabase.rpc("increment_post_reaction", { post_id: id });
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? { ...p, reactionCounts: { ...p.reactionCounts, [reactionType]: (p.reactionCounts[reactionType] || 0) + 1 } }
+          : p
+      )
+    );
+    const { error } = await supabase.rpc("increment_post_reaction", { post_id: id, reaction_type: reactionType });
     if (error) {
       // en cas d'échec, on annule l'effet optimiste
-      next.delete(id);
+      next.delete(key);
       setReactedIds(new Set(next));
       saveReactedSet(next);
-      setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, reactions: Math.max(0, p.reactions - 1) } : p)));
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? { ...p, reactionCounts: { ...p.reactionCounts, [reactionType]: Math.max(0, (p.reactionCounts[reactionType] || 0) - 1) } }
+            : p
+        )
+      );
     }
   }
 
@@ -496,8 +520,8 @@ export default function JvCut() {
         {featured && (
           <FeaturedCard
             post={featured}
-            hasReacted={reactedIds.has(featured.id)}
-            onReact={() => handleReact(featured.id)}
+            reactedIds={reactedIds}
+            onReact={(type) => handleReact(featured.id, type)}
             onShare={() => handleShare(featured)}
             copied={copiedId === featured.id}
           />
@@ -525,8 +549,8 @@ export default function JvCut() {
                   onEdit={() => openComposer(post)}
                   onDelete={() => deletePost(post.id)}
                   isAdmin={isAdmin}
-                  hasReacted={reactedIds.has(post.id)}
-                  onReact={() => handleReact(post.id)}
+                  reactedIds={reactedIds}
+                  onReact={(type) => handleReact(post.id, type)}
                   onShare={() => handleShare(post)}
                   copied={copiedId === post.id}
                 />
@@ -732,7 +756,7 @@ export default function JvCut() {
   );
 }
 
-function FeaturedCard({ post, hasReacted, onReact, onShare, copied }) {
+function FeaturedCard({ post, reactedIds, onReact, onShare, copied }) {
   const tagMeta = TAGS.find((t) => t.id === post.tag) || TAGS[0];
   const platMetas = (post.platforms || []).map((id) => PLATFORMS.find((p) => p.id === id)).filter(Boolean);
   return (
@@ -772,27 +796,8 @@ function FeaturedCard({ post, hasReacted, onReact, onShare, copied }) {
         <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>{timeAgo(post.ts)}</span>
       </div>
       <p style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.3, margin: 0, color: "var(--ink)" }}>{post.text}</p>
-      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 12 }}>
-        <button
-          onClick={onReact}
-          disabled={hasReacted}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 5,
-            background: hasReacted ? "var(--reactedBg)" : "var(--subtle)",
-            border: "none",
-            borderRadius: 999,
-            padding: "6px 12px",
-            fontSize: 13,
-            fontWeight: 700,
-            color: hasReacted ? "#FF7A19" : "#7B5CFA",
-            cursor: hasReacted ? "default" : "pointer",
-            fontFamily: "'Poppins', sans-serif",
-          }}
-        >
-          <Flame size={14} fill={hasReacted ? "#FF7A19" : "none"} /> {post.reactions || 0}
-        </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+        <ReactionBar post={post} reactedIds={reactedIds} onReact={onReact} size="normal" />
         <button
           onClick={onShare}
           style={{
@@ -819,6 +824,41 @@ function FeaturedCard({ post, hasReacted, onReact, onShare, copied }) {
         )}
       </div>
     </div>
+  );
+}
+
+function ReactionBar({ post, reactedIds, onReact, size }) {
+  const compact = size === "compact";
+  return (
+    <>
+      {REACTIONS.map(({ id, Icon, color }) => {
+        const has = reactedIds.has(reactionKey(post.id, id));
+        const count = (post.reactionCounts && post.reactionCounts[id]) || 0;
+        return (
+          <button
+            key={id}
+            onClick={() => onReact(id)}
+            disabled={has}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: compact ? 3 : 5,
+              background: has ? "var(--reactedBg)" : "var(--subtle)",
+              border: "none",
+              borderRadius: 999,
+              padding: compact ? "3px 7px" : "6px 11px",
+              fontSize: compact ? 11 : 13,
+              fontWeight: 700,
+              color: has ? color : "var(--muted)",
+              cursor: has ? "default" : "pointer",
+              fontFamily: "'Poppins', sans-serif",
+            }}
+          >
+            <Icon size={compact ? 12 : 14} fill={has ? color : "none"} /> {count}
+          </button>
+        );
+      })}
+    </>
   );
 }
 
@@ -855,7 +895,7 @@ function DateBar({ label }) {
   );
 }
 
-function TileCard({ post, expanded, onToggleExpand, onEdit, onDelete, isAdmin, hasReacted, onReact, onShare, copied }) {
+function TileCard({ post, expanded, onToggleExpand, onEdit, onDelete, isAdmin, reactedIds, onReact, onShare, copied }) {
   const tagMeta = TAGS.find((t) => t.id === post.tag) || TAGS[0];
   const platMetas = (post.platforms || []).map((id) => PLATFORMS.find((p) => p.id === id)).filter(Boolean);
   const myWords = wordCount(post.text);
@@ -949,27 +989,8 @@ function TileCard({ post, expanded, onToggleExpand, onEdit, onDelete, isAdmin, h
           {expanded ? "réduire ▲" : "… voir plus"}
         </button>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-        <button
-          onClick={onReact}
-          disabled={hasReacted}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 3,
-            background: hasReacted ? "var(--reactedBg)" : "var(--subtle)",
-            border: "none",
-            borderRadius: 999,
-            padding: "3px 8px",
-            fontSize: 11,
-            fontWeight: 700,
-            color: hasReacted ? "#FF7A19" : "#7B5CFA",
-            cursor: hasReacted ? "default" : "pointer",
-            fontFamily: "'Poppins', sans-serif",
-          }}
-        >
-          <Flame size={11} fill={hasReacted ? "#FF7A19" : "none"} /> {post.reactions || 0}
-        </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+        <ReactionBar post={post} reactedIds={reactedIds} onReact={onReact} size="compact" />
         <button
           onClick={onShare}
           style={{
