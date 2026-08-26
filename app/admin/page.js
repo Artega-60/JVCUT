@@ -49,6 +49,7 @@ export default function AdminPage() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [viewStats, setViewStats] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -71,6 +72,25 @@ export default function AdminPage() {
         if (!error && data) setStats(computeStats(data));
         setStatsLoading(false);
       });
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    Promise.all([
+      supabase.from("page_views").select("*", { count: "exact", head: true }),
+      supabase.from("page_views").select("*", { count: "exact", head: true }).gte("created_at", startOfToday),
+      supabase.from("page_views").select("*", { count: "exact", head: true }).gte("created_at", sevenDaysAgo),
+    ]).then(([totalRes, todayRes, weekRes]) => {
+      setViewStats({
+        total: totalRes.count ?? 0,
+        today: todayRes.count ?? 0,
+        last7: weekRes.count ?? 0,
+      });
+    });
   }, [session]);
 
   async function tryLogin() {
@@ -254,6 +274,23 @@ export default function AdminPage() {
         </div>
 
         {statsLoading && <div style={{ color: "#9A8F84", fontSize: 13 }}>Chargement des statistiques...</div>}
+
+        {viewStats && (
+          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+            <div style={{ flex: 1, background: "#FFFFFF", borderRadius: 16, padding: "16px 14px", textAlign: "center", boxShadow: "0 6px 16px rgba(30,27,75,0.06)" }}>
+              <div style={{ fontSize: 26, fontWeight: 800 }}>{viewStats.total}</div>
+              <div style={{ fontSize: 11.5, color: "#9A8F84", fontWeight: 600 }}>visites totales</div>
+            </div>
+            <div style={{ flex: 1, background: "#FFFFFF", borderRadius: 16, padding: "16px 14px", textAlign: "center", boxShadow: "0 6px 16px rgba(30,27,75,0.06)" }}>
+              <div style={{ fontSize: 26, fontWeight: 800 }}>{viewStats.today}</div>
+              <div style={{ fontSize: 11.5, color: "#9A8F84", fontWeight: 600 }}>aujourd'hui</div>
+            </div>
+            <div style={{ flex: 1, background: "#FFFFFF", borderRadius: 16, padding: "16px 14px", textAlign: "center", boxShadow: "0 6px 16px rgba(30,27,75,0.06)" }}>
+              <div style={{ fontSize: 26, fontWeight: 800 }}>{viewStats.last7}</div>
+              <div style={{ fontSize: 11.5, color: "#9A8F84", fontWeight: 600 }}>7 derniers jours</div>
+            </div>
+          </div>
+        )}
 
         {stats && (
           <>
