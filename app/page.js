@@ -288,7 +288,21 @@ export default function JvCut() {
     fetchFeatured();
     fetchTicker();
     setReactedIds(getReactedSet());
+    logVisit();
   }, []);
+
+  // Enregistre une visite une seule fois par session de navigation (pas à
+  // chaque rafraîchissement de données), pour un compteur simple et sans
+  // cookies de suivi.
+  function logVisit() {
+    try {
+      if (window.sessionStorage.getItem("jvcut:visit-logged")) return;
+      window.sessionStorage.setItem("jvcut:visit-logged", "1");
+    } catch (e) {
+      // si le sessionStorage est inaccessible, on enregistre quand même
+    }
+    supabase.from("page_views").insert({}).then(() => {});
+  }
 
   // Mise à jour en temps réel : dès qu'une news est ajoutée, modifiée ou
   // supprimée (par n'importe qui, y compris depuis un autre appareil), le
