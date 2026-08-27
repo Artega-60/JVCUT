@@ -534,7 +534,7 @@ export default function JvCut() {
           <div
             style={{
               display: "inline-block",
-              animation: "scroll-left 28s linear infinite",
+              animation: "scroll-left 42s linear infinite",
               fontFamily: "'Rajdhani', sans-serif",
               fontWeight: 700,
               fontSize: 14,
