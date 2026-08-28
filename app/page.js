@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, Fragment } from "react";
-import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Share2, Flame, ThumbsDown, PartyPopper, Search, Sun, Moon, MessageCircle } from "lucide-react";
+import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Share2, Flame, ThumbsDown, PartyPopper, Search, Sun, Moon, MessageCircle, Video } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
 const REACTIONS = [
@@ -93,6 +93,7 @@ function rowToPost(row) {
     platforms: row.platforms || [],
     source: row.source || "",
     sourceWords: row.source_words,
+    linkType: row.link_type || "source",
     reactionCounts: row.reaction_counts || {},
     featured: !!row.featured,
     commentCount: row.comment_count || 0,
@@ -155,7 +156,7 @@ export default function JvCut() {
   const [loaded, setLoaded] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [draft, setDraft] = useState({ text: "", tag: "annonce", platforms: ["multi"], source: "", sourceWords: "", featured: false });
+  const [draft, setDraft] = useState({ text: "", tag: "annonce", platforms: ["multi"], source: "", sourceWords: "", featured: false, linkType: "source" });
   const [activeFilter, setActiveFilter] = useState("all");
   const [activePlatform, setActivePlatform] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -387,10 +388,11 @@ export default function JvCut() {
         source: post.source || "",
         sourceWords: post.sourceWords ? String(post.sourceWords) : "",
         featured: !!post.featured,
+        linkType: post.linkType || "source",
       });
     } else {
       setEditingId(null);
-      setDraft({ text: "", tag: "annonce", platforms: ["multi"], source: "", sourceWords: "", featured: false });
+      setDraft({ text: "", tag: "annonce", platforms: ["multi"], source: "", sourceWords: "", featured: false, linkType: "source" });
     }
     setComposerOpen(true);
     setSaveError("");
@@ -416,6 +418,7 @@ export default function JvCut() {
       source: draft.source.trim(),
       source_words: draft.sourceWords ? parseInt(draft.sourceWords, 10) : null,
       featured: draft.featured,
+      link_type: draft.source.trim() ? draft.linkType : "source",
     };
     let error;
     // Une seule news à la une à la fois : si on en coche une nouvelle,
@@ -817,11 +820,58 @@ export default function JvCut() {
               ))}
             </div>
 
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              <button
+                type="button"
+                onClick={() => setDraft((d) => ({ ...d, linkType: "source" }))}
+                style={{
+                  flex: 1,
+                  background: draft.linkType === "source" ? "#7B5CFA" : "var(--subtle)",
+                  color: draft.linkType === "source" ? "#FFFFFF" : "var(--muted)",
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "7px 0",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "'Poppins', sans-serif",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 5,
+                }}
+              >
+                <ExternalLink size={13} /> Lien source
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraft((d) => ({ ...d, linkType: "video" }))}
+                style={{
+                  flex: 1,
+                  background: draft.linkType === "video" ? "#7B5CFA" : "var(--subtle)",
+                  color: draft.linkType === "video" ? "#FFFFFF" : "var(--muted)",
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "7px 0",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "'Poppins', sans-serif",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 5,
+                }}
+              >
+                <Video size={13} /> Lien vidéo
+              </button>
+            </div>
+
             <div style={{ display: "flex", gap: 8 }}>
               <input
                 value={draft.source}
                 onChange={(e) => setDraft((d) => ({ ...d, source: e.target.value }))}
-                placeholder="Lien source (optionnel)"
+                placeholder={draft.linkType === "video" ? "Lien vidéo (optionnel)" : "Lien source (optionnel)"}
                 style={inputStyle}
               />
             </div>
@@ -1168,7 +1218,7 @@ function FeaturedCard({ post, reactedIds, onReact, onShare, copied, isAdmin }) {
         </button>
         {post.source && (
           <a href={post.source} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "auto", fontSize: 12, color: "#7B5CFA", fontWeight: 700, textDecoration: "none", display: "flex", alignItems: "center", gap: 4 }}>
-            <ExternalLink size={12} /> source
+            {post.linkType === "video" ? <Video size={12} /> : <ExternalLink size={12} />} {post.linkType === "video" ? "vidéo" : "source"}
           </a>
         )}
       </div>
@@ -1383,7 +1433,7 @@ function TileCard({ post, expanded, onToggleExpand, onEdit, onDelete, isAdmin, r
       <div style={{ display: "flex", gap: 10, marginTop: 2 }}>
         {post.source && (
           <a href={post.source} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10.5, color: "#7B5CFA", fontWeight: 700, textDecoration: "none" }}>
-            source
+            {post.linkType === "video" ? "vidéo" : "source"}
           </a>
         )}
         {isAdmin && (
