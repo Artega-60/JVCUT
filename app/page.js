@@ -698,6 +698,21 @@ export default function JvCut() {
             </button>
           </div>
         )}
+
+        <div style={{ textAlign: "center", marginTop: 34, paddingBottom: 6 }}>
+          <a
+            href="/contact"
+            style={{
+              fontSize: 12.5,
+              color: "var(--muted)",
+              fontWeight: 600,
+              textDecoration: "none",
+              fontFamily: "'Poppins', sans-serif",
+            }}
+          >
+            Nous contacter
+          </a>
+        </div>
       </div>
 
       {/* FAB */}

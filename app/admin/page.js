@@ -50,6 +50,8 @@ export default function AdminPage() {
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [viewStats, setViewStats] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -92,6 +94,34 @@ export default function AdminPage() {
       });
     });
   }, [session]);
+
+  function fetchMessages() {
+    setMessagesLoading(true);
+    supabase
+      .from("contact_messages")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50)
+      .then(({ data, error }) => {
+        if (!error && data) setMessages(data);
+        setMessagesLoading(false);
+      });
+  }
+
+  useEffect(() => {
+    if (!session) return;
+    fetchMessages();
+  }, [session]);
+
+  async function markAsRead(id) {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, read: true } : m)));
+    await supabase.from("contact_messages").update({ read: true }).eq("id", id);
+  }
+
+  async function deleteMessage(id) {
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+    await supabase.from("contact_messages").delete().eq("id", id);
+  }
 
   async function tryLogin() {
     setLoginLoading(true);
@@ -350,6 +380,69 @@ export default function AdminPage() {
             </div>
           </>
         )}
+
+        <div style={{ background: "#FFFFFF", borderRadius: 16, padding: "16px 16px 18px", marginTop: 14, boxShadow: "0 6px 16px rgba(30,27,75,0.06)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>Messages reçus</div>
+            {messages.filter((m) => !m.read).length > 0 && (
+              <span
+                style={{
+                  background: "#FF477E",
+                  color: "#FFFFFF",
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  borderRadius: 999,
+                  padding: "2px 7px",
+                }}
+              >
+                {messages.filter((m) => !m.read).length} non lu{messages.filter((m) => !m.read).length > 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+
+          {messagesLoading && <div style={{ fontSize: 12.5, color: "#9A8F84" }}>Chargement...</div>}
+          {!messagesLoading && messages.length === 0 && (
+            <div style={{ fontSize: 12.5, color: "#9A8F84" }}>Aucun message pour l'instant.</div>
+          )}
+
+          {messages.map((m) => (
+            <div
+              key={m.id}
+              style={{
+                borderTop: "1px solid #F5F1FF",
+                padding: "12px 0",
+                opacity: m.read ? 0.6 : 1,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                <span style={{ fontWeight: 700, fontSize: 12.5 }}>{m.name || "Anonyme"}</span>
+                <span style={{ fontSize: 10.5, color: "#9A8F84" }}>
+                  {new Date(m.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+              <a href={`mailto:${m.email}`} style={{ fontSize: 11.5, color: "#7B5CFA", fontWeight: 600, textDecoration: "none" }}>
+                {m.email}
+              </a>
+              <p style={{ fontSize: 13, margin: "6px 0 8px", lineHeight: 1.4 }}>{m.message}</p>
+              <div style={{ display: "flex", gap: 12 }}>
+                {!m.read && (
+                  <button
+                    onClick={() => markAsRead(m.id)}
+                    style={{ background: "none", border: "none", color: "#7B5CFA", fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 0 }}
+                  >
+                    Marquer comme lu
+                  </button>
+                )}
+                <button
+                  onClick={() => deleteMessage(m.id)}
+                  style={{ background: "none", border: "none", color: "#FF477E", fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 0 }}
+                >
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

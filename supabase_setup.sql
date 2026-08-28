@@ -7,7 +7,7 @@ create table if not exists posts (
   platforms text[] not null default '{}',
   source text default '',
   source_words integer,
-  reactions integer not null default 0,
+  reaction_counts jsonb not null default '{}'::jsonb,
   featured boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -43,26 +43,30 @@ create policy "Authenticated delete"
   to authenticated
   using (true);
 
--- Fonction qui incrémente le compteur de réactions de façon sécurisée,
--- sans donner un accès en écriture complet à la table aux visiteurs anonymes.
-create or replace function increment_post_reaction(post_id uuid)
-returns integer
+-- Fonction qui incrémente un type de réaction précis (fire, angry, laugh, party),
+-- de façon sécurisée, sans donner un accès en écriture complet à la table.
+create or replace function increment_post_reaction(post_id uuid, reaction_type text)
+returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  new_count integer;
+  new_counts jsonb;
 begin
   update posts
-  set reactions = reactions + 1
+  set reaction_counts = jsonb_set(
+    coalesce(reaction_counts, '{}'::jsonb),
+    array[reaction_type],
+    to_jsonb(coalesce((reaction_counts->>reaction_type)::integer, 0) + 1)
+  )
   where id = post_id
-  returning reactions into new_count;
-  return new_count;
+  returning reaction_counts into new_counts;
+  return new_counts;
 end;
 $$;
 
-grant execute on function increment_post_reaction(uuid) to anon, authenticated;
+grant execute on function increment_post_reaction(uuid, text) to anon, authenticated;
 
 -- Quelques news de démonstration (facultatif, tu peux les supprimer depuis le site une fois connecté)
 insert into posts (text, tag, platforms, source_words) values
