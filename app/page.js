@@ -125,6 +125,40 @@ function reactionKey(postId, reactionType) {
   return `${postId}:${reactionType}`;
 }
 
+const STREAK_KEY = "jvcut:streak";
+
+function formatLocalDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// Calcule (et met à jour) la série de jours consécutifs de visite, stockée
+// sur le navigateur du visiteur. Revenir le lendemain incrémente la série,
+// sauter un jour la remet à 1.
+function updateAndGetStreak() {
+  try {
+    const todayStr = formatLocalDate(new Date());
+    const raw = window.localStorage.getItem(STREAK_KEY);
+    let data = raw ? JSON.parse(raw) : null;
+
+    if (!data) {
+      data = { lastVisit: todayStr, streak: 1 };
+    } else if (data.lastVisit === todayStr) {
+      // déjà comptée aujourd'hui, on ne change rien
+    } else {
+      const diffDays = Math.round((new Date(todayStr) - new Date(data.lastVisit)) / 86400000);
+      data = diffDays === 1 ? { lastVisit: todayStr, streak: data.streak + 1 } : { lastVisit: todayStr, streak: 1 };
+    }
+
+    window.localStorage.setItem(STREAK_KEY, JSON.stringify(data));
+    return data.streak;
+  } catch (e) {
+    return 0;
+  }
+}
+
 async function sharePost(post) {
   const text = `${post.text} — via JvCut`;
   const url = typeof window !== "undefined" ? window.location.origin : "";
@@ -312,10 +346,15 @@ export default function JvCut() {
   useEffect(() => {
     const channel = supabase
       .channel("posts-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, (payload) => {
         fetchPosts({ append: false });
         fetchFeatured();
         fetchTicker();
+        // Si une toute nouvelle news arrive pendant que l'onglet n'est pas
+        // regardé, on le signale dans le titre de l'onglet du navigateur.
+        if (payload.eventType === "INSERT" && (document.hidden || !document.hasFocus())) {
+          setUnseenCount((c) => c + 1);
+        }
       })
       .subscribe();
     return () => {
@@ -323,6 +362,39 @@ export default function JvCut() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilter, activePlatform, debouncedSearch]);
+
+  // Titre d'onglet dynamique : affiche "⚡ N" quand des news sont tombées
+  // pendant que l'onglet était en arrière-plan, et revient à la normale
+  // dès que le visiteur revient dessus.
+  const [unseenCount, setUnseenCount] = useState(0);
+  const baseTitleRef = useRef("");
+
+  useEffect(() => {
+    baseTitleRef.current = document.title;
+  }, []);
+
+  useEffect(() => {
+    document.title = unseenCount > 0 ? `⚡ ${unseenCount} · ${baseTitleRef.current}` : baseTitleRef.current;
+  }, [unseenCount]);
+
+  useEffect(() => {
+    function handleBackToTab() {
+      if (document.visibilityState === "visible") setUnseenCount(0);
+    }
+    document.addEventListener("visibilitychange", handleBackToTab);
+    window.addEventListener("focus", handleBackToTab);
+    return () => {
+      document.removeEventListener("visibilitychange", handleBackToTab);
+      window.removeEventListener("focus", handleBackToTab);
+    };
+  }, []);
+
+  // Série de visites : compte les jours consécutifs où le visiteur revient
+  // sur le site, mémorisé sur son navigateur (pas besoin de compte).
+  const [streak, setStreak] = useState(0);
+  useEffect(() => {
+    setStreak(updateAndGetStreak());
+  }, []);
 
   // Force un rafraîchissement périodique pour que les "il y a X min"
   // restent à jour même sans nouvelle news.
@@ -523,6 +595,27 @@ export default function JvCut() {
             {isDark ? <Sun size={15} /> : <Moon size={15} />}
           </button>
         </div>
+
+        {streak >= 2 && (
+          <div style={{ textAlign: "center", marginTop: 10 }}>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                background: "var(--subtle)",
+                color: "#FF7A19",
+                fontFamily: "'Poppins', sans-serif",
+                fontSize: 12,
+                fontWeight: 700,
+                borderRadius: 999,
+                padding: "5px 12px",
+              }}
+            >
+              <Flame size={13} fill="#FF7A19" /> {streak} jours de suite
+            </span>
+          </div>
+        )}
 
         {/* Breaking news ticker */}
         <div
