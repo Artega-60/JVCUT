@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, Fragment } from "react";
-import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Share2, Flame, ThumbsDown, PartyPopper, Search, Sun, Moon } from "lucide-react";
+import { Plus, X, ExternalLink, Trash2, Pencil, Zap, Share2, Flame, ThumbsDown, PartyPopper, Search, Sun, Moon, MessageCircle } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
 const REACTIONS = [
@@ -95,6 +95,7 @@ function rowToPost(row) {
     sourceWords: row.source_words,
     reactionCounts: row.reaction_counts || {},
     featured: !!row.featured,
+    commentCount: row.comment_count || 0,
     ts: new Date(row.created_at).getTime(),
   };
 }
@@ -624,6 +625,7 @@ export default function JvCut() {
             onReact={(type) => handleReact(featured.id, type)}
             onShare={() => handleShare(featured)}
             copied={copiedId === featured.id}
+            isAdmin={isAdmin}
           />
         )}
 
@@ -894,7 +896,142 @@ export default function JvCut() {
   );
 }
 
-function FeaturedCard({ post, reactedIds, onReact, onShare, copied }) {
+const COMMENT_MIN_TIME_MS = 1500;
+
+function CommentsSection({ postId, isAdmin }) {
+  const [comments, setComments] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [authorName, setAuthorName] = useState("");
+  const [content, setContent] = useState("");
+  const [honeypot, setHoneypot] = useState("");
+  const [posting, setPosting] = useState(false);
+  const openedAt = useRef(Date.now());
+
+  useEffect(() => {
+    let active = true;
+    supabase
+      .from("comments")
+      .select("*")
+      .eq("post_id", postId)
+      .order("created_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (active && !error && data) setComments(data);
+        if (active) setLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [postId]);
+
+  async function submitComment(e) {
+    e.preventDefault();
+    if (!content.trim()) return;
+    // Piège à robots + délai minimum, même principe que le formulaire de contact
+    if (honeypot.trim() || Date.now() - openedAt.current < COMMENT_MIN_TIME_MS) {
+      setContent("");
+      return;
+    }
+    setPosting(true);
+    const payload = { post_id: postId, author: authorName.trim() || null, content: content.trim() };
+    const { data, error } = await supabase.from("comments").insert(payload).select().single();
+    setPosting(false);
+    if (!error && data) {
+      setComments((prev) => [...prev, data]);
+      setContent("");
+    }
+  }
+
+  async function deleteComment(id) {
+    setComments((prev) => prev.filter((c) => c.id !== id));
+    await supabase.from("comments").delete().eq("id", id);
+  }
+
+  return (
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 10, fontFamily: "'Poppins', sans-serif" }}>
+        {comments.length > 0 ? `${comments.length} commentaire${comments.length > 1 ? "s" : ""}` : "Aucun commentaire"}
+      </div>
+
+      {!loaded && <div style={{ fontSize: 12, color: "var(--muted)" }}>Chargement...</div>}
+
+      {comments.map((c) => (
+        <div key={c.id} style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink)" }}>
+              {c.author || "Anonyme"}{" "}
+              <span style={{ fontWeight: 500, color: "var(--muted)", fontSize: 10.5 }}>· {timeAgo(new Date(c.created_at).getTime())}</span>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.35 }}>{c.content}</div>
+          </div>
+          {isAdmin && (
+            <button
+              onClick={() => deleteComment(c.id)}
+              style={{ background: "none", border: "none", color: "#FF477E", cursor: "pointer", padding: 0, flexShrink: 0 }}
+              aria-label="Supprimer ce commentaire"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
+      ))}
+
+      <form onSubmit={submitComment} style={{ marginTop: 10 }}>
+        {/* Champ piège invisible, même principe que le formulaire de contact */}
+        <div aria-hidden="true" style={{ position: "absolute", left: -9999, width: 1, height: 1, overflow: "hidden" }}>
+          <input type="text" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
+        </div>
+        <input
+          value={authorName}
+          onChange={(e) => setAuthorName(e.target.value)}
+          placeholder="Ton nom (optionnel)"
+          style={{ ...commentInputStyle, marginBottom: 6 }}
+        />
+        <div style={{ display: "flex", gap: 6 }}>
+          <input
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Écrire un commentaire..."
+            style={{ ...commentInputStyle, flex: 1 }}
+          />
+          <button
+            type="submit"
+            disabled={posting || !content.trim()}
+            style={{
+              background: content.trim() ? "linear-gradient(135deg, #FF477E, #7B5CFA)" : "var(--subtleBorder)",
+              color: content.trim() ? "#FFFFFF" : "var(--placeholder)",
+              border: "none",
+              borderRadius: 10,
+              padding: "0 14px",
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: content.trim() ? "pointer" : "default",
+              fontFamily: "'Poppins', sans-serif",
+            }}
+          >
+            Envoyer
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+const commentInputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  background: "var(--subtle)",
+  border: "2px solid var(--subtleBorder)",
+  borderRadius: 10,
+  color: "var(--ink)",
+  fontFamily: "'Poppins', sans-serif",
+  fontSize: 12.5,
+  fontWeight: 500,
+  padding: "9px 11px",
+  outline: "none",
+};
+
+function FeaturedCard({ post, reactedIds, onReact, onShare, copied, isAdmin }) {
+  const [showComments, setShowComments] = useState(false);
   const tagMeta = TAGS.find((t) => t.id === post.tag) || TAGS[0];
   const platMetas = (post.platforms || []).map((id) => PLATFORMS.find((p) => p.id === id)).filter(Boolean);
   return (
@@ -955,12 +1092,32 @@ function FeaturedCard({ post, reactedIds, onReact, onShare, copied }) {
         >
           <Share2 size={14} /> {copied ? "Copié !" : "Partager"}
         </button>
+        <button
+          onClick={() => setShowComments((v) => !v)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            background: "var(--subtle)",
+            border: "none",
+            borderRadius: 999,
+            padding: "6px 12px",
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#7B5CFA",
+            cursor: "pointer",
+            fontFamily: "'Poppins', sans-serif",
+          }}
+        >
+          <MessageCircle size={14} /> {post.commentCount || 0}
+        </button>
         {post.source && (
           <a href={post.source} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "auto", fontSize: 12, color: "#7B5CFA", fontWeight: 700, textDecoration: "none", display: "flex", alignItems: "center", gap: 4 }}>
             <ExternalLink size={12} /> source
           </a>
         )}
       </div>
+      {showComments && <CommentsSection postId={post.id} isAdmin={isAdmin} />}
     </div>
   );
 }
@@ -1148,6 +1305,25 @@ function TileCard({ post, expanded, onToggleExpand, onEdit, onDelete, isAdmin, r
         >
           <Share2 size={11} /> {copied ? "Copié !" : ""}
         </button>
+        <button
+          onClick={onToggleExpand}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 3,
+            background: "var(--subtle)",
+            border: "none",
+            borderRadius: 999,
+            padding: "3px 8px",
+            fontSize: 11,
+            fontWeight: 700,
+            color: "#7B5CFA",
+            cursor: "pointer",
+            fontFamily: "'Poppins', sans-serif",
+          }}
+        >
+          <MessageCircle size={11} /> {post.commentCount || 0}
+        </button>
       </div>
       <div style={{ display: "flex", gap: 10, marginTop: 2 }}>
         {post.source && (
@@ -1162,6 +1338,7 @@ function TileCard({ post, expanded, onToggleExpand, onEdit, onDelete, isAdmin, r
           </>
         )}
       </div>
+      {expanded && <CommentsSection postId={post.id} isAdmin={isAdmin} />}
     </div>
   );
 }
