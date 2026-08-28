@@ -897,6 +897,32 @@ export default function JvCut() {
 }
 
 const COMMENT_MIN_TIME_MS = 1500;
+const COMMENT_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes entre deux commentaires
+const COMMENT_COOLDOWN_KEY = "jvcut:last-comment-at";
+
+function getCooldownRemaining() {
+  try {
+    const last = parseInt(window.localStorage.getItem(COMMENT_COOLDOWN_KEY) || "0", 10);
+    const remaining = COMMENT_COOLDOWN_MS - (Date.now() - last);
+    return remaining > 0 ? remaining : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function markCommentPosted() {
+  try {
+    window.localStorage.setItem(COMMENT_COOLDOWN_KEY, String(Date.now()));
+  } catch (e) {
+    // ignore
+  }
+}
+
+function formatCooldown(ms) {
+  const totalMinutes = Math.ceil(ms / 60000);
+  if (totalMinutes <= 1) return "moins d'une minute";
+  return `${totalMinutes} minutes`;
+}
 
 function CommentsSection({ postId, isAdmin }) {
   const [comments, setComments] = useState([]);
@@ -905,6 +931,7 @@ function CommentsSection({ postId, isAdmin }) {
   const [content, setContent] = useState("");
   const [honeypot, setHoneypot] = useState("");
   const [posting, setPosting] = useState(false);
+  const [cooldownMs, setCooldownMs] = useState(0);
   const openedAt = useRef(Date.now());
 
   useEffect(() => {
@@ -923,9 +950,19 @@ function CommentsSection({ postId, isAdmin }) {
     };
   }, [postId]);
 
+  useEffect(() => {
+    setCooldownMs(getCooldownRemaining());
+    const interval = setInterval(() => setCooldownMs(getCooldownRemaining()), 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   async function submitComment(e) {
     e.preventDefault();
     if (!content.trim()) return;
+    if (getCooldownRemaining() > 0) {
+      setCooldownMs(getCooldownRemaining());
+      return;
+    }
     // Piège à robots + délai minimum, même principe que le formulaire de contact
     if (honeypot.trim() || Date.now() - openedAt.current < COMMENT_MIN_TIME_MS) {
       setContent("");
@@ -938,6 +975,8 @@ function CommentsSection({ postId, isAdmin }) {
     if (!error && data) {
       setComments((prev) => [...prev, data]);
       setContent("");
+      markCommentPosted();
+      setCooldownMs(COMMENT_COOLDOWN_MS);
     }
   }
 
@@ -975,43 +1014,59 @@ function CommentsSection({ postId, isAdmin }) {
         </div>
       ))}
 
-      <form onSubmit={submitComment} style={{ marginTop: 10 }}>
-        {/* Champ piège invisible, même principe que le formulaire de contact */}
-        <div aria-hidden="true" style={{ position: "absolute", left: -9999, width: 1, height: 1, overflow: "hidden" }}>
-          <input type="text" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
+      {cooldownMs > 0 ? (
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 12,
+            color: "var(--muted)",
+            background: "var(--subtle)",
+            borderRadius: 10,
+            padding: "9px 11px",
+            fontFamily: "'Poppins', sans-serif",
+          }}
+        >
+          Tu as déjà posté un commentaire récemment. Tu peux en poster un nouveau dans {formatCooldown(cooldownMs)}.
         </div>
-        <input
-          value={authorName}
-          onChange={(e) => setAuthorName(e.target.value)}
-          placeholder="Ton nom (optionnel)"
-          style={{ ...commentInputStyle, marginBottom: 6 }}
-        />
-        <div style={{ display: "flex", gap: 6 }}>
+      ) : (
+        <form onSubmit={submitComment} style={{ marginTop: 10 }}>
+          {/* Champ piège invisible, même principe que le formulaire de contact */}
+          <div aria-hidden="true" style={{ position: "absolute", left: -9999, width: 1, height: 1, overflow: "hidden" }}>
+            <input type="text" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
+          </div>
           <input
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Écrire un commentaire..."
-            style={{ ...commentInputStyle, flex: 1 }}
+            value={authorName}
+            onChange={(e) => setAuthorName(e.target.value)}
+            placeholder="Ton nom (optionnel)"
+            style={{ ...commentInputStyle, marginBottom: 6 }}
           />
-          <button
-            type="submit"
-            disabled={posting || !content.trim()}
-            style={{
-              background: content.trim() ? "linear-gradient(135deg, #FF477E, #7B5CFA)" : "var(--subtleBorder)",
-              color: content.trim() ? "#FFFFFF" : "var(--placeholder)",
-              border: "none",
-              borderRadius: 10,
-              padding: "0 14px",
-              fontSize: 12.5,
-              fontWeight: 700,
-              cursor: content.trim() ? "pointer" : "default",
-              fontFamily: "'Poppins', sans-serif",
-            }}
-          >
-            Envoyer
-          </button>
-        </div>
-      </form>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Écrire un commentaire..."
+              style={{ ...commentInputStyle, flex: 1 }}
+            />
+            <button
+              type="submit"
+              disabled={posting || !content.trim()}
+              style={{
+                background: content.trim() ? "linear-gradient(135deg, #FF477E, #7B5CFA)" : "var(--subtleBorder)",
+                color: content.trim() ? "#FFFFFF" : "var(--placeholder)",
+                border: "none",
+                borderRadius: 10,
+                padding: "0 14px",
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: content.trim() ? "pointer" : "default",
+                fontFamily: "'Poppins', sans-serif",
+              }}
+            >
+              Envoyer
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
